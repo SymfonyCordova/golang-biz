@@ -9,6 +9,10 @@ import (
 type Serialize struct {
 }
 
+func NewSerialize()*Serialize{
+	return new(Serialize)
+}
+
 func (s *Serialize)SerializeStructToFile(fileName string, t interface{}) error {
 
 	_, err:= os.Stat(fileName)
