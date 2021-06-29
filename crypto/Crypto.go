@@ -554,3 +554,44 @@ func TestEccSig() {
 	b1 := EccVerifySignature(src, "ecc_public.pem", rText, sText)
 	log.Printf("%t", b1)
 }
+
+func RunEcdsa() {
+	cure := elliptic.P256()
+	privateKey, err := ecdsa.GenerateKey(cure, rand.Reader)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	pubKey := privateKey.PublicKey
+
+	data := "hello world!"
+	hash := sha256.Sum256([]byte(data))
+
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hash[:])
+	if err != nil {
+		log.Panic(err)
+	}
+
+	fmt.Printf("pubkey: %v\n", pubKey)
+	fmt.Printf("r: %v len = %d\n", r.Bytes(), len(r.Bytes()))
+	fmt.Printf("s: %v len = %d\n", s.Bytes(), len(s.Bytes()))
+
+	//把 r, s进行序列化传输
+	signature := append(r.Bytes(), s.Bytes()...)
+
+	//....传输
+
+	//定义两个辅助的big.Int
+	r1 := big.Int{}
+	s1 := big.Int{}
+	//拆分我们signature,平均分,前半部分r,后半部分s
+	m := len(signature) / 2
+	//r1.SetBytes(signature[0:m])
+	r1.SetBytes(signature[:m])
+	s1.SetBytes(signature[m:])
+
+	//校验需要三个东西: 数据, 签名, 公钥
+	res := ecdsa.Verify(&pubKey, hash[:], &r1, &s1)
+	fmt.Printf("校验结果 %t\n", res)
+
+}
