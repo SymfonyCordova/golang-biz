@@ -18,7 +18,7 @@ type Wallets struct {
 }
 
 //创建方法
-func NewWallets()*Wallets{
+func NewWallets() *Wallets {
 	var ws Wallets
 	ws.WalletsMap = make(map[string]*Wallet)
 	err := ws.loadFile()
@@ -29,9 +29,13 @@ func NewWallets()*Wallets{
 }
 
 //读取文件方法,把所有的wallet读出来
-func (ws *Wallets)loadFile() error {
+func (ws *Wallets) loadFile() error {
 	_, err := os.Stat(WalletFile)
-	if os.IsNotExist(err){
+	if os.IsNotExist(err) {
+		_, err = os.Create(WalletFile)
+		if err != nil {
+			log.Panic(err)
+		}
 		return err
 	}
 
@@ -55,7 +59,7 @@ func (ws *Wallets)loadFile() error {
 	return nil
 }
 
-func (ws *Wallets)CreateWallet()string{
+func (ws *Wallets) CreateWallet() string {
 	wallet := NewWallet()
 	address := wallet.NewAddress()
 
@@ -69,7 +73,7 @@ func (ws *Wallets)CreateWallet()string{
 }
 
 //保存方法,把新建的wallet添加进去
-func (ws *Wallets)saveToFile(wallet *Wallet) error {
+func (ws *Wallets) saveToFile(wallet *Wallet) error {
 	var buffer bytes.Buffer
 
 	gob.Register(elliptic.P256())
@@ -89,7 +93,7 @@ func (ws *Wallets)saveToFile(wallet *Wallet) error {
 }
 
 //获取所有钱包
-func (ws *Wallets) ListAllAddress()[]string{
+func (ws *Wallets) ListAllAddress() []string {
 	var addresses []string
 
 	//遍历钱包,将所有的key取出来返回
@@ -100,18 +104,12 @@ func (ws *Wallets) ListAllAddress()[]string{
 	return addresses
 }
 
-
 //通过地址返回公钥哈希
-func GetPubKeyFromAddress(address string)[]byte{
+func GetPubKeyFromAddress(address string) []byte {
 	//1.解码
 	addressByte := bizEncoding.Base58Decode([]byte(address))
 	//2.截取出公钥哈希: 去除校验码(4字节)
 	length := len(addressByte)
-	pubKeyHash := addressByte[1:length-4]
+	pubKeyHash := addressByte[1 : length-4]
 	return pubKeyHash
 }
-
-
-
-
-

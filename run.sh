@@ -1,5 +1,6 @@
 #!/bin/bash
-rm golang-biz -f
-rm *db -f
+rm -rf golang-biz -f
+rm -rf *.db -f
+# rm -rf *.bat -f
 go build
 ./golang-biz

@@ -2,6 +2,8 @@ package block
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"errors"
 	"fmt"
 	"github.com/boltdb/bolt"
 	"log"
@@ -11,7 +13,7 @@ import (
 //引入区块链
 type BlockChain struct {
 	//使用数据库代替数组
-	db *bolt.DB
+	db   *bolt.DB
 	tail []byte //存储最后一个区块的哈希
 }
 
@@ -19,12 +21,12 @@ const blockChainDb = "blockChain.db"
 const blockBucket = "blockBucket"
 
 //定义一个区块链
-func NewBlockChain(address string)*BlockChain{
+func NewBlockChain(address string) *BlockChain {
 	//最后一个区块的哈希, 从数据库中读出来
 	var lastHash []byte
 
 	//1 打开数据库
-	db,err := bolt.Open(blockChainDb,0660,nil)
+	db, err := bolt.Open(blockChainDb, 0660, nil)
 	if err != nil {
 		log.Panic(fmt.Sprintf("打开数据库失败:%s", err))
 	}
@@ -33,7 +35,7 @@ func NewBlockChain(address string)*BlockChain{
 	err = db.Update(func(tx *bolt.Tx) error {
 		//找到抽屉bucket(如果没有就创建)
 		bucket := tx.Bucket([]byte(blockBucket))
-		if bucket == nil{
+		if bucket == nil {
 			//没有抽屉,我们需要创建
 			bucket, err = tx.CreateBucket([]byte(blockBucket))
 			if err != nil {
@@ -55,7 +57,7 @@ func NewBlockChain(address string)*BlockChain{
 			}
 
 			lastHash = genesisBlock.Hash
-		}else{
+		} else {
 			lastHash = bucket.Get([]byte("lastHashKey"))
 		}
 
@@ -66,13 +68,19 @@ func NewBlockChain(address string)*BlockChain{
 }
 
 //创始块
-func GenesisBlock(address string)*Block{
+func GenesisBlock(address string) *Block {
 	coinbase := NewCoinbaseTx(address, "内蒙古大佬矿工")
 	return NewBlock([]*Transaction{coinbase}, []byte{})
 }
 
 //添加区块
-func (bc *BlockChain)AddBlock(txs []*Transaction){
+func (bc *BlockChain) AddBlock(txs []*Transaction) {
+	for _, tx := range txs {
+		if !bc.VerifyTransaction(tx) {
+			return
+		}
+	}
+
 	//如何获取前区块的哈希值
 	//创建新的区块 添加到区块链db中
 	err := bc.db.Update(func(tx *bolt.Tx) error {
@@ -106,13 +114,13 @@ func (bc *BlockChain)AddBlock(txs []*Transaction){
 }
 
 //找到指定地址的所有的utxo 就是未消费的支出
-func (bc *BlockChain)FindUTXOs(pubKeyHash []byte)[]TXOutput{
+func (bc *BlockChain) FindUTXOs(pubKeyHash []byte) []TXOutput {
 	var utxos []TXOutput
 
 	txs := bc.FindUTXOTransactions(pubKeyHash)
-	for _, tx:=range txs{
-		for _, output := range tx.TXOutputs{
-			if bytes.Equal( pubKeyHash, output.PubKeyHash ){
+	for _, tx := range txs {
+		for _, output := range tx.TXOutputs {
+			if bytes.Equal(pubKeyHash, output.PubKeyHash) {
 				utxos = append(utxos, output)
 			}
 		}
@@ -127,7 +135,7 @@ func (bc *BlockChain) PrintChain() {
 		b := tx.Bucket([]byte(blockBucket))
 
 		err := b.ForEach(func(k, v []byte) error {
-			if bytes.Equal(k, []byte("lastHashKey")){
+			if bytes.Equal(k, []byte("lastHashKey")) {
 				return nil
 			}
 
@@ -147,14 +155,13 @@ func (bc *BlockChain) PrintChain() {
 			return nil
 		})
 
-
 		if err != nil {
 			return err
 		}
 
 		return nil
 	})
-	
+
 	if err != nil {
 		return
 	}
@@ -163,14 +170,14 @@ func (bc *BlockChain) PrintChain() {
 //根据需要找到合理的utxos
 func (bc *BlockChain) FindNeedUTXOs(senderPubKeyHash []byte, amount float64) (map[string][]uint64, float64) {
 	//找到的合理的utxos集合
-	utxos :=  make(map[string][]uint64)
-	var calc float64//找到的utxos里面包含钱的总数
+	utxos := make(map[string][]uint64)
+	var calc float64 //找到的utxos里面包含钱的总数
 
 	txs := bc.FindUTXOTransactions(senderPubKeyHash)
-	for _, tx:=range txs{
-		for index, output := range tx.TXOutputs{
+	for _, tx := range txs {
+		for index, output := range tx.TXOutputs {
 			//这个output和我们目标的地址相同,满足条件,加到返回utxo数组中
-			if bytes.Equal(senderPubKeyHash, output.PubKeyHash){
+			if bytes.Equal(senderPubKeyHash, output.PubKeyHash) {
 				if calc < amount {
 					//把utxo加进来
 					utxos[string(tx.TXID)] = append(utxos[string(tx.TXID)], uint64(index))
@@ -191,7 +198,7 @@ func (bc *BlockChain) FindNeedUTXOs(senderPubKeyHash []byte, amount float64) (ma
 	return utxos, calc
 }
 
-func (bc *BlockChain)FindUTXOTransactions(senderPubKeyHash []byte) []*Transaction {
+func (bc *BlockChain) FindUTXOTransactions(senderPubKeyHash []byte) []*Transaction {
 	var txs []*Transaction //存储所有包含utxo交易集合
 	//map[交易id]
 	spentOutputs := make(map[string][]int64)
@@ -202,7 +209,7 @@ func (bc *BlockChain)FindUTXOTransactions(senderPubKeyHash []byte) []*Transactio
 
 	//遍历区块
 	it := bc.NewIterator()
-	for  {
+	for {
 		block := it.Next()
 
 		//遍历交易
@@ -215,9 +222,9 @@ func (bc *BlockChain)FindUTXOTransactions(senderPubKeyHash []byte) []*Transactio
 				//如果相同,则跳过,否则添加
 				//map[2222] = []int64{0}
 				//map[3333] = []int64{0, 1}
-				if spentOutputs[string(tx.TXID)] != nil{
-					for _, j := range spentOutputs[string(tx.TXID)]{
-						if int64(index) == j{
+				if spentOutputs[string(tx.TXID)] != nil {
+					for _, j := range spentOutputs[string(tx.TXID)] {
+						if int64(index) == j {
 							//当前准备添加output已经消耗过了,不要再添加了
 							continue OUTPUT
 						}
@@ -226,7 +233,7 @@ func (bc *BlockChain)FindUTXOTransactions(senderPubKeyHash []byte) []*Transactio
 
 				//这个output和我们目标的地址相同,满足条件,加到返回utxo数组中
 				//if output.PubKeyHash == address{
-				if bytes.Equal(senderPubKeyHash, output.PubKeyHash){
+				if bytes.Equal(senderPubKeyHash, output.PubKeyHash) {
 					//utxo = append(utxo, output)
 					//查找所有包含我的outx的交易集合
 					txs = append(txs, tx)
@@ -246,10 +253,75 @@ func (bc *BlockChain)FindUTXOTransactions(senderPubKeyHash []byte) []*Transactio
 				}
 			}
 		}
-		if len(block.PrevHash) == 0{
+		if len(block.PrevHash) == 0 {
 			break
 		}
 	}
 
 	return txs
+}
+
+//根据id查找交易本身,需要遍历整个区块链
+func (bc *BlockChain) FindTransactionByTXid(id []byte) (Transaction, error) {
+	//1.遍历区块链
+	it := bc.NewIterator()
+	for {
+		block := it.Next()
+
+		//2.遍历交易
+		for _, tx := range block.Transactions {
+			//3.比较交易,找到直接推出
+			if bytes.Equal(tx.TXID, id) {
+				return *tx, nil
+			}
+		}
+
+		if len(block.PrevHash) == 0 {
+			break
+		}
+	}
+
+	//4.如果没找到,返回Transaction,同时返回错误状态
+	return Transaction{}, errors.New("无效的交易id")
+}
+
+func (bc *BlockChain) SignTransaction(tx *Transaction, privateKey *ecdsa.PrivateKey) {
+	//签名，交易创建最后进行签名
+	prevTXs := make(map[string]Transaction)
+	//找到所有引用的交易
+	//1.根据inputs来找,有多少个input,就遍历多少次
+	//2.找到目标交易 (根据TXid来找)
+	//3.添加到prevTXs里面
+	for _, input := range tx.TXInputs {
+		tx, err := bc.FindTransactionByTXid(input.TXid)
+		if err != nil {
+			log.Panic(err)
+		}
+		prevTXs[string(input.TXid)] = tx
+	}
+
+	tx.Sign(privateKey, prevTXs)
+}
+
+func (bc *BlockChain) VerifyTransaction(tx *Transaction) bool {
+	//挖坑交易不需要签名和校验
+	if tx.IsCoinbase() {
+		return true
+	}
+
+	//签名，交易创建最后进行签名
+	prevTXs := make(map[string]Transaction)
+	//找到所有引用的交易
+	//1.根据inputs来找,有多少个input,就遍历多少次
+	//2.找到目标交易 (根据TXid来找)
+	//3.添加到prevTXs里面
+	for _, input := range tx.TXInputs {
+		tx, err := bc.FindTransactionByTXid(input.TXid)
+		if err != nil {
+			log.Panic(err)
+		}
+		prevTXs[string(input.TXid)] = tx
+	}
+
+	return tx.Verify(prevTXs)
 }
