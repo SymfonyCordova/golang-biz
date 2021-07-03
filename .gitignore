@@ -3,3 +3,6 @@
 *.dSYM/
 /.idea
 *.gob
+*.db
+*.bat
+golang-biz
