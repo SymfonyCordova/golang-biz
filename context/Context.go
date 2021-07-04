@@ -1,4 +1,8 @@
 package context
+
+//Context是协程安全的 代码中可以将单个Context传递给任意数量的goroutine,并在取消该Context时可以将信号传递给所有的goroutine
+//Context可以派生 组成一个树 父的context退出,子也会退出
+
 /*
 type Context interface {
     Deadline() (deadline time.Time, ok bool)
@@ -24,7 +28,7 @@ Deadline方法指示一段时间后当前goroutine是否会被取消；
 而context所包含的额外信息键值对是如何存储的呢？
 	其实可以想象一颗树，树的每个节点可能携带一组键值对,如果当前节点上无法找到key所对应的值，就会向上去父节点里找，直到根节点
 
-context.Background() 树的根节点(父节点)
+context.Background() 树的根节点(父节点) 属于main函数的
 context.TODO()
 //Context使用原则
 //不要把Context放在结构体中，要以参数的方式进行传递
@@ -53,18 +57,18 @@ import (
 )
 
 func a(ctx context.Context) {
-	ticker := time.NewTicker(1* time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	i := 0
 	ctx, cancle := context.WithCancel(ctx)
 	for _ = range ticker.C {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			fmt.Println("a break")
 			return
 		default:
 			i++
 			if i == 5 {
-				fmt.Println(i , "start cancle")
+				fmt.Println(i, "start cancle")
 				cancle()
 			}
 			fmt.Println("a send num = ", 10)
@@ -73,11 +77,11 @@ func a(ctx context.Context) {
 	}
 }
 
-func b(ctx context.Context, num int){
-	ticker := time.NewTicker(1* time.Second)
+func b(ctx context.Context, num int) {
+	ticker := time.NewTicker(1 * time.Second)
 	for _ = range ticker.C {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			fmt.Println("b break")
 			return
 		default:
@@ -87,11 +91,11 @@ func b(ctx context.Context, num int){
 	}
 }
 
-func c(ctx context.Context, num int){
-	ticker := time.NewTicker(1* time.Second)
+func c(ctx context.Context, num int) {
+	ticker := time.NewTicker(1 * time.Second)
 	for _ = range ticker.C {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			fmt.Println("c break")
 			return
 		default:
@@ -100,7 +104,7 @@ func c(ctx context.Context, num int){
 	}
 }
 
-func DemoRelease(){
+func DemoRelease() {
 	//ctx, _ := context.WithCancel(context.Background())
 
 	go a(context.TODO())
@@ -111,8 +115,34 @@ func DemoRelease(){
 
 	for true {
 		fmt.Println("..")
-		time.Sleep(1*time.Second)
+		time.Sleep(1 * time.Second)
 	}
 }
 
+var key1 string = "key1"
+var key2 string = "key2"
 
+func DemoContextKey() {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	//value
+	valueCtx := context.WithValue(ctx, key1, "key1 value")
+	valueCtx2 := context.WithValue(valueCtx, key2, "key2 value")
+
+	go watch(valueCtx2)
+
+	cancel()
+}
+
+func watch(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println(ctx.Value(key1))
+			fmt.Println(ctx.Value(key2))
+			break
+		default:
+			fmt.Println(ctx.Value(key1), "...")
+		}
+	}
+}
