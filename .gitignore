@@ -6,3 +6,4 @@
 *.db
 *.bat
 golang-biz
+go.sum
