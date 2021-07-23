@@ -7,3 +7,4 @@
 *.bat
 golang-biz
 go.sum
+/test
