@@ -8,3 +8,7 @@
 golang-biz
 go.sum
 /test
+.DS_Store
+wallet.bat
+myfifo
+blockChain.db
